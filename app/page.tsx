@@ -29,6 +29,16 @@ export default function Home() {
   const { isUploading, pushDataToMongo, fetchHistoricalData, historicalData } =
     useMongoDB(confirmedSubject);
 
+  // Auto-confirm user when logged in
+  useEffect(() => {
+    if (session && userId !== "unknown") {
+      setCurrentSubject(userId);
+      setConfirmedSubject(userId);
+      fetchHistoricalData(userId);
+      fetchLastAccess();
+    }
+  }, [session, userId]);
+
   // Fetch historical data and last access when the user is confirmed
   useEffect(() => {
     if (userId !== "unknown" && confirmedSubject) {
@@ -102,6 +112,15 @@ export default function Home() {
     },
     ppgData: ppgData,
     timestamp: new Date(),
+  };
+
+  // Validation before saving to MongoDB
+  const handleSaveData = () => {
+    if (!confirmedSubject || confirmedSubject === "unknown") {
+      alert("Please confirm a user before saving data.");
+      return;
+    }
+    pushDataToMongo(recordData);
   };
 
   // Start or stop recording
