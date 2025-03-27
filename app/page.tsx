@@ -240,7 +240,7 @@ export default function Home() {
 
         {/* Save Data to MongoDB Button */}
         <button
-          onClick={() => pushDataToMongo(recordData)}
+          onClick={handleSaveData}
           className="p-3 rounded-lg text-sm bg-blue-500 hover:bg-blue-600 text-white transition-all duration-300"
           disabled={isUploading || ppgData.length === 0}
         >
