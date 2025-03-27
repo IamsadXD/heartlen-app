@@ -1,103 +1,379 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect, useRef } from "react";
+import { useSession, signIn } from "next-auth/react";
+import CameraFeed from "./components/CameraFeed";
+// import MetricsCard from "./components/MetricsCard";
+import SignalCombinationSelector from "./components/SignalCombinationSelector";
+import ChartComponent from "./components/ChartComponent";
+import usePPGProcessing from "./hooks/usePPGProcessing";
+import useSignalQuality from "./hooks/useSignalQuality";
+import useMongoDB from "./hooks/useMongoDB";
+import { RecordData } from "./types";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const { data: session, status } = useSession();
+  const [isRecording, setIsRecording] = useState(false);
+  const [signalCombination, setSignalCombination] = useState("default");
+  const [lastAccess, setLastAccess] = useState<Date | null>(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [currentSubject, setCurrentSubject] = useState("");
+  const [confirmedSubject, setConfirmedSubject] = useState("");
+  const [darkMode, setDarkMode] = useState(true); // Default to dark mode
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  // Extract userId and email from the session
+  const userId = session?.user?.userId || "unknown";
+  const userEmail = session?.user?.email || "unknown";
+
+  // MongoDB hook
+  const { isUploading, pushDataToMongo, fetchHistoricalData, historicalData } =
+    useMongoDB(confirmedSubject);
+
+  // Fetch historical data and last access when the user is confirmed
+  useEffect(() => {
+    if (userId !== "unknown" && confirmedSubject) {
+      fetchHistoricalData(confirmedSubject);
+      fetchLastAccess();
+    }
+  }, [userId, confirmedSubject]);
+
+  // Confirm user function
+  const confirmUser = async () => {
+    if (currentSubject.trim()) {
+      setConfirmedSubject(currentSubject.trim());
+
+      try {
+        // Fetch user data from MongoDB using the current subject ID
+        await fetchHistoricalData(currentSubject.trim());
+
+        // Also fetch the last access date for this subject
+        const response = await fetch(
+          `/api/last-access?subjectId=${currentSubject.trim()}`
+        );
+        const data = await response.json();
+        if (data.success) {
+          setLastAccess(new Date(data.lastAccess));
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    } else {
+      alert("Please enter a valid Subject ID.");
+    }
+  };
+
+  // Fetch last access date
+  const fetchLastAccess = async () => {
+    try {
+      const response = await fetch(`/api/last-access?subjectId=${userId}`);
+      const data = await response.json();
+      if (data.success) {
+        setLastAccess(new Date(data.lastAccess));
+      }
+    } catch (error) {
+      console.error("Error fetching last access:", error);
+    }
+  };
+
+  // PPG processing hook
+  const {
+    ppgData,
+    valleys,
+    heartRate,
+    hrv,
+    processFrame,
+    startCamera,
+    stopCamera,
+  } = usePPGProcessing(isRecording, signalCombination, videoRef, canvasRef);
+
+  // Signal quality hook
+  const { signalQuality, qualityConfidence } = useSignalQuality(ppgData);
+
+  // Record data for MongoDB
+  const recordData: RecordData = {
+    subjectId: confirmedSubject || "unknown",
+    heartRate: {
+      bpm: isNaN(heartRate.bpm) ? 0 : heartRate.bpm,
+      confidence: hrv.confidence || 0,
+    },
+    hrv: {
+      sdnn: isNaN(hrv.sdnn) ? 0 : hrv.sdnn,
+      confidence: hrv.confidence || 0,
+    },
+    ppgData: ppgData,
+    timestamp: new Date(),
+  };
+
+  // Start or stop recording
+  useEffect(() => {
+    if (isRecording) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  }, [isRecording]);
+
+  // Process frames continuously while recording
+  useEffect(() => {
+    let animationFrame: number;
+
+    const processFrameLoop = () => {
+      if (isRecording) {
+        processFrame();
+        animationFrame = requestAnimationFrame(processFrameLoop);
+      }
+    };
+
+    if (isRecording) {
+      processFrameLoop();
+    }
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [isRecording]);
+
+  // Toggle dark mode function
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
+  if (status === "loading") {
+    return <div>Loading...</div>;
+  }
+
+  if (!session) {
+    return (
+      <div
+        className={
+          darkMode ? "bg-gray-900 text-white p-4" : "bg-white text-gray-800 p-4"
+        }
+      >
+        <h1>Please sign in to continue</h1>
+        <button
+          onClick={() => signIn("google", { callbackUrl: "/" })}
+          className={`p-2 rounded-lg ${
+            darkMode ? "bg-blue-600 text-white" : "bg-blue-500 text-white"
+          }`}
+        >
+          Sign In with Google
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`p-4 min-h-screen transition-colors duration-300 ${
+        darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-800"
+      }`}
+    >
+      {/* Header Section */}
+      <header className="mb-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div>
+          <p
+            className={`text-sm ${
+              darkMode ? "text-gray-400" : "text-gray-500"
+            }`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Signed in as: {userEmail}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">Heart Lens</h1>
+        </div>
+
+        <button
+          onClick={toggleDarkMode}
+          className={`p-2 rounded-full ${
+            darkMode ? "bg-yellow-400 text-gray-900" : "bg-gray-800 text-white"
+          }`}
+          aria-label="Toggle dark mode"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          {darkMode ? "☀️" : "🌙"}
+        </button>
+      </header>
+      {/* Display Last Access */}
+      {lastAccess && (
+        <div
+          className={`mb-4 text-sm ${
+            darkMode ? "text-gray-400" : "text-gray-500"
+          }`}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          Last data refresh for {userId}: {lastAccess.toLocaleString()}
+        </div>
+      )}
+
+      {/* Control Buttons */}
+      <div className="flex space-x-4 mb-4">
+        {/* Start/Stop Recording Button */}
+        <button
+          onClick={() => setIsRecording(!isRecording)}
+          className={`p-3 rounded-lg text-sm transition-all duration-300 ${
+            isRecording
+              ? "bg-red-500 hover:bg-red-600 text-white"
+              : "bg-cyan-500 hover:bg-cyan-600 text-white"
+          }`}
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {isRecording ? "⏹ STOP RECORDING" : "⏺ START RECORDING"}
+        </button>
+
+        {/* Save Data to MongoDB Button */}
+        <button
+          onClick={() => pushDataToMongo(recordData)}
+          className="p-3 rounded-lg text-sm bg-blue-500 hover:bg-blue-600 text-white transition-all duration-300"
+          disabled={isUploading || ppgData.length === 0}
+        >
+          {isUploading ? "Uploading..." : "Save Data to MongoDB"}
+        </button>
+      </div>
+
+      {/* Main Grid: Camera Feed and Metrics Side by Side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left Column: Camera Feed */}
+        <div
+          className={`rounded-lg p-4 ${
+            darkMode ? "bg-gray-800" : "bg-white shadow"
+          }`}
+        >
+          <h2
+            className={`text-lg font-bold mb-2 ${
+              darkMode ? "text-white" : "text-gray-800"
+            }`}
+          >
+            Camera Feed
+          </h2>
+          <CameraFeed videoRef={videoRef} canvasRef={canvasRef} />
+          <div className="mt-4">
+            <SignalCombinationSelector
+              signalCombination={signalCombination}
+              setSignalCombination={setSignalCombination}
+              darkMode={darkMode}
+            />
+          </div>
+        </div>
+
+        {/* Right Column: Chart and Metrics */}
+        <div className="grid grid-cols-1 gap-4">
+          {/* User Panel */}
+          <div
+            className={`rounded-lg p-4 ${
+              darkMode ? "bg-gray-800" : "bg-white shadow"
+            }`}
+          >
+            <h2
+              className={`text-lg font-bold mb-2 ${
+                darkMode ? "text-white" : "text-gray-800"
+              }`}
+            >
+              User Panel
+            </h2>
+            <div className="flex flex-col space-y-2">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={currentSubject}
+                  onChange={(e) => setCurrentSubject(e.target.value)}
+                  placeholder="Enter Subject ID"
+                  className={`w-full p-2 rounded-md border ${
+                    darkMode
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300 text-gray-800"
+                  }`}
+                />
+                <button
+                  onClick={confirmUser}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-md whitespace-nowrap"
+                >
+                  Confirm User
+                </button>
+              </div>
+
+              {/* User information display - only shows after historical data fetch */}
+              {confirmedSubject && (
+                <div
+                  className={`p-3 rounded-lg ${
+                    darkMode
+                      ? "bg-gray-700 text-white"
+                      : "bg-gray-200 text-gray-800"
+                  }`}
+                >
+                  {isUploading ? (
+                    <p>Loading user data...</p>
+                  ) : (
+                    <>
+                      <p>
+                        <strong>Subject ID:</strong> {confirmedSubject}
+                      </p>
+                      {lastAccess && (
+                        <p>
+                          <strong>Last Access:</strong>{" "}
+                          {lastAccess.toLocaleString()}
+                        </p>
+                      )}
+                      {historicalData.avgHeartRate >= 0 && (
+                        <p>
+                          <strong>Avg Heart Rate:</strong>{" "}
+                          {historicalData.avgHeartRate} BPM
+                        </p>
+                      )}
+                      {historicalData.avgHRV >= 0 && (
+                        <p>
+                          <strong>Avg HRV:</strong> {historicalData.avgHRV} ms
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chart Component */}
+          <div
+            className={`rounded-lg p-4 ${
+              darkMode ? "bg-gray-800" : "bg-white shadow"
+            }`}
+          >
+            <h2
+              className={`text-lg font-bold mb-2 ${
+                darkMode ? "text-white" : "text-gray-800"
+              }`}
+            >
+              PPG Signal Chart
+            </h2>
+            <ChartComponent ppgData={ppgData} valleys={valleys} />
+          </div>
+
+          {/* Metrics Cards */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-cyan-500 rounded-lg p-4 text-white">
+              <h3 className="font-bold">Heart Rate</h3>
+              <p className="text-xl font-bold">{heartRate.bpm} BPM</p>
+              <p className="text-sm">Confidence: {heartRate.confidence}</p>
+            </div>
+
+            <div className="bg-green-500 rounded-lg p-4 text-white">
+              <h3 className="font-bold">HRV</h3>
+              <p className="text-xl font-bold">{hrv.sdnn} ms</p>
+              <p className="text-sm">Confidence: {hrv.confidence}</p>
+            </div>
+
+            <div className="bg-purple-500 rounded-lg p-4 text-white">
+              <h3 className="font-bold">Signal Quality</h3>
+              <p className="text-xl font-bold">{signalQuality}</p>
+              <p className="text-sm">Confidence: {qualityConfidence}</p>
+            </div>
+
+            <div className="bg-blue-500 rounded-lg p-4 text-white">
+              <h3 className="font-bold">Historical Data</h3>
+              <p>Avg HR: {historicalData.avgHeartRate} BPM</p>
+              <p>Avg HRV: {historicalData.avgHRV} ms</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
