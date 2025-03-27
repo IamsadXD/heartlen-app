@@ -15,7 +15,7 @@ The HeartLen App is a web-based tool designed to process photoplethysmography (P
    npm install
    ```
 3. Set up environment variables
-- Create a .env.local file in the root directory and add your MongoDB connection string (for details, read **Connecting to MongoDB**)
+   - Create a .env.local file in the root directory and add your MongoDB connection string (for details, read **Connecting to MongoDB**)
   ```bash
   MONGODB_URI=your_mongodb_connection_string
   ```
@@ -24,7 +24,7 @@ The HeartLen App is a web-based tool designed to process photoplethysmography (P
    npm run dev
    ```
 5. Open the app in your browser:
-- Navigate to http://localhost:3000
+   - Navigate to http://localhost:3000
 
 ### Connecting to MongoDB
 To link the app to your MongoDB database:
@@ -37,4 +37,8 @@ To deploy the app:
 1. Build the production version:
    ```bash
    npm run build
+   ```
+2. Start the app
+   ```bash
+   npm start
    ```
