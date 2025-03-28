@@ -17,7 +17,12 @@ The HeartLen App is a web-based tool designed to process photoplethysmography (P
 3. Set up environment variables
    - Create a .env.local file in the root directory and add your MongoDB connection string (for details, read **Connecting to MongoDB**)
   ```bash
-  MONGODB_URI=your_mongodb_connection_string
+  MONGODB_URI=mongodb+srv://chjacoblee:7wtsobRtzfXrlgb4@cluster0.9ekmg.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+  OPENROUTER_API_KEY=api_key
+  GOOGLE_CLIENT_ID=client_id
+  GOOGLE_CLIENT_SECRET=client_scret
+  NEXTAUTH_URL=domain
+  NEXTAUTH_SECRET=nextauth_secret
   ```
 4. Start the development server
    ```bash
