@@ -16,14 +16,13 @@ export default function useSignalQuality(
   // Load TensorFlow.js model
   useEffect(() => {
     const loadModel = async () => {
-      setSignalQuality('loading'); // Set loading state first
       try {
         const loadedModel = await tf.loadLayersModel('/tfjs_model/model.json');
         modelRef.current = loadedModel;
         console.log('PPG quality assessment model loaded successfully');
       } catch (error) {
         console.error('Error loading model:', error);
-        setSignalQuality('error'); // Optional: set error state on failure
+        setSignalQuality('error'); 
       }
     };
     
