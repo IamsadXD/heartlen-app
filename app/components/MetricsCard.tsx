@@ -1,8 +1,10 @@
 interface MetricsCardProps {
   title: string;
-  value: number | string | { bpm?: number; sdnn?: number }; // Support for structured types
+  value: number | string | { bpm?: number; sdnn?: number }; 
   unit?: string;
-  confidence?: number; // Optional confidence for cases where it's not needed
+  confidence?: number; 
+  bgColor?: string; 
+  secondaryValue?: string; 
 }
 
 export default function MetricsCard({
@@ -10,28 +12,37 @@ export default function MetricsCard({
   value,
   unit,
   confidence,
+  bgColor = "bg-white", 
+  secondaryValue,
 }: MetricsCardProps) {
+  const isDarkBg = bgColor !== "bg-white";
+  const textColor = isDarkBg ? "text-white" : "text-gray-800";
+  const subTextColor = isDarkBg ? "text-white opacity-80" : "text-gray-500";
+
   return (
-    <div className="bg-white p-4 rounded-lg shadow flex-1 min-w-[150px]">
-      <p className="text-gray-500">{title}</p>
-      <h2 className="text-2xl font-bold">
+    <div className={`${bgColor} p-4 rounded-lg shadow flex-1 min-w-[150px]`}>
+      <h3 className={`font-bold ${textColor}`}>{title}</h3>
+      <p className={`text-xl font-bold ${textColor}`}>
         {typeof value === 'number' && value > 0
-          ? `${value} ${unit || ''}` // Display numeric values with optional units
+          ? `${value} ${unit || ''}`
           : typeof value === 'object' && value !== null
           ? value.bpm !== undefined
-            ? `${value.bpm} BPM` // Handle HeartRateResult
+            ? `${value.bpm} BPM` 
             : value.sdnn !== undefined
             ? isNaN(value.sdnn)
-              ? '--' // Handle NaN for HRV
-              : `${value.sdnn} ms` // Handle HRVResult
+              ? '--' 
+              : `${value.sdnn} ms` 
             : '--'
-          : '--'}{' '}
+          : value.toString()}{' '}
         {/* Fallback for undefined or invalid values */}
-      </h2>
+      </p>
       {confidence !== undefined && (
-        <p className="text-sm text-gray-500">
-          Confidence: {confidence.toFixed(1)}%
+        <p className={`text-sm ${subTextColor}`}>
+          Confidence: {confidence}
         </p>
+      )}
+      {secondaryValue && (
+        <p className={`${subTextColor}`}>{secondaryValue}</p>
       )}
     </div>
   );

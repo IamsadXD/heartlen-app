@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
 import CameraFeed from "./components/CameraFeed";
-// import MetricsCard from "./components/MetricsCard";
+import MetricsCard from "./components/MetricsCard";
 import SignalCombinationSelector from "./components/SignalCombinationSelector";
 import ChartComponent from "./components/ChartComponent";
 import usePPGProcessing from "./hooks/usePPGProcessing";
@@ -367,29 +367,36 @@ export default function Home() {
 
           {/* Metrics Cards */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-cyan-500 rounded-lg p-4 text-white">
-              <h3 className="font-bold">Heart Rate</h3>
-              <p className="text-xl font-bold">{heartRate.bpm} BPM</p>
-              <p className="text-sm">Confidence: {heartRate.confidence}</p>
-            </div>
+            <MetricsCard
+              title="Heart Rate"
+              value={heartRate.bpm}
+              unit="BPM"
+              confidence={heartRate.confidence}
+              bgColor="bg-cyan-500"
+            />
 
-            <div className="bg-green-500 rounded-lg p-4 text-white">
-              <h3 className="font-bold">HRV</h3>
-              <p className="text-xl font-bold">{hrv.sdnn} ms</p>
-              <p className="text-sm">Confidence: {hrv.confidence}</p>
-            </div>
+            <MetricsCard
+              title="HRV"
+              value={hrv.sdnn}
+              unit="ms"
+              confidence={hrv.confidence}
+              bgColor="bg-green-500"
+            />
 
-            <div className="bg-purple-500 rounded-lg p-4 text-white">
-              <h3 className="font-bold">Signal Quality</h3>
-              <p className="text-xl font-bold">{signalQuality}</p>
-              <p className="text-sm">Confidence: {qualityConfidence}</p>
-            </div>
+            <MetricsCard
+              title="Signal Quality"
+              value={signalQuality}
+              confidence={qualityConfidence}
+              bgColor="bg-purple-500"
+            />
 
-            <div className="bg-blue-500 rounded-lg p-4 text-white">
-              <h3 className="font-bold">Historical Data</h3>
-              <p>Avg HR: {historicalData.avgHeartRate} BPM</p>
-              <p>Avg HRV: {historicalData.avgHRV} ms</p>
-            </div>
+            <MetricsCard
+              title="Historical Data"
+              value={historicalData.avgHeartRate}
+              unit="BPM"
+              bgColor="bg-blue-500"
+              secondaryValue={`Avg HRV: ${historicalData.avgHRV} ms`}
+            />
           </div>
         </div>
       </div>
